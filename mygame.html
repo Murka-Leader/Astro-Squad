@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ASTRO-SQUAD: LEGACY</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
+        :root { --azure: #00d4ff; --squad: #00ff88; --alien: #ff0055; --gold: #ffcc00; }
+        body { margin: 0; background: #000; color: #fff; font-family: 'Orbitron', sans-serif; overflow: hidden; }
+        canvas { display: block; }
+        
+        /* UI Overlays */
+        .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.9); z-index: 100; }
+        .hidden { display: none !important; }
+        
+        #hud { position: absolute; top: 20px; left: 20px; pointer-events: none; display: flex; flex-direction: column; gap: 10px; }
+        .hud-item { background: rgba(255,255,255,0.05); padding: 8px 15px; border-left: 3px solid var(--azure); }
+        
+        .btn { background: none; border: 2px solid var(--azure); color: var(--azure); padding: 12px 40px; font-family: inherit; cursor: pointer; transition: 0.3s; margin: 10px; text-transform: uppercase; }
+        .btn:hover { background: var(--azure); color: #000; box-shadow: 0 0 20px var(--azure); }
+
+        #shop-menu { background: #0a0a1a; padding: 40px; border: 2px solid var(--azure); }
+        .shop-row { display: flex; justify-content: space-between; width: 300px; margin: 10px 0; align-items: center; }
+        
+        #boss-ui { position: absolute; bottom: 50px; left: 50%; transform: translateX(-50%); width: 60%; display: none; }
+        #boss-hp { height: 6px; background: var(--alien); width: 100%; box-shadow: 0 0 10px var(--alien); }
+    </style>
+</head>
+<body>
+
+    <div id="hud">
+        <div class="hud-item">SECTOR: <span id="sector-val">1</span></div>
+        <div class="hud-item" style="color: var(--gold)">CREDITS: <span id="gold-val">0</span></div>
+        <div class="hud-item">SQUAD: <span id="squad-val">4</span>/4</div>
+    </div>
+
+    <div id="boss-ui">
+        <div id="boss-name" style="font-size: 0.6rem; margin-bottom: 5px; color: var(--alien);">MUTATION OVERLORD</div>
+        <div style="background: #222;"><div id="boss-hp"></div></div>
+    </div>
+
+    <div id="menu" class="overlay">
+        <h1 style="font-size: 3rem; color: var(--azure); text-shadow: 0 0 20px var(--azure);">ASTRO-SQUAD</h1>
+        <p>COMMAND THE AZURE UNIT & THE GREEN VANGUARD</p>
+        <button class="btn" onclick="Game.start()">Launch Mission</button>
+        <button class="btn" onclick="Game.showShop()">The Hangar (Shop)</button>
+    </div>
+
+    <div id="shop" class="overlay hidden">
+        <div id="shop-menu">
+            <h2>THE HANGAR</h2>
+            <div class="shop-row"><span>HULL PLATING</span><button class="btn" onclick="Game.buy('hp')">500c</button></div>
+            <div class="shop-row"><span>PLASMA DAMAGE</span><button class="btn" onclick="Game.buy('dmg')">800c</button></div>
+            <button class="btn" onclick="Game.hideShop()">Back to Base</button>
+        </div>
+    </div>
+
+    <canvas id="stage"></canvas>
+
+    <script>
+        /**
+         * ASTRO-SQUAD: LEGACY ENGINE
+         * Senior-level State Management & Entity Handling
+         */
+        const canvas = document.getElementById('stage');
+        const ctx = canvas.getContext('2d');
+
+        const Game = {
+            active: false,
+            sector: 1,
+            gold: 0,
+            upgrades: { hp: 1, dmg: 1 },
+            entities: [],
+            stars: [],
+            mouse: { x: 0, y: 0 },
+
+            init() {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+                window.onmousemove = e => { this.mouse.x = e.clientX; this.mouse.y = e.clientY; };
+                for(let i=0; i<80; i++) this.stars.push({x: Math.random()*canvas.width, y: Math.random()*canvas.height, s: Math.random()*2+1});
+                this.loop();
+            },
+
+            start() {
+                document.getElementById('menu').classList.add('hidden');
+                this.active = true;
+                this.entities = [];
+                // Spawn Azure Commander
+                this.player = new Actor(canvas.width/2, canvas.height-100, 'azure');
+                // Spawn Green Squad
+                for(let i=0; i<4; i++) this.entities.push(new Actor(canvas.width/2, canvas.height, 'green', i));
+                this.spawnWave();
+            },
+
+            spawnWave() {
+                if(!this.active) return;
+                const isBoss = this.sector % 5 === 0;
+                if(isBoss) {
+                    this.entities.push(new Actor(canvas.width/2, -150, 'boss'));
+                    document.getElementById('boss-ui').style.display = 'block';
+                } else {
+                    for(let i=0; i<3+this.sector; i++) {
+                        this.entities.push(new Actor(Math.random()*canvas.width, -50, 'alien'));
+                    }
+                }
+            },
+
+            showShop() { document.getElementById('shop').classList.remove('hidden'); },
+            hideShop() { document.getElementById('shop').classList.add('hidden'); },
+            buy(type) {
+                let cost = type === 'hp' ? 500 : 800;
+                if(this.gold >= cost) { this.gold -= cost; this.upgrades[type] += 0.2; }
+            },
+
+            loop() {
+                ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // Parallax background
+                ctx.fillStyle = '#fff';
+                this.stars.forEach(s => {
+                    s.y += s.s; if(s.y > canvas.height) s.y = 0;
+                    ctx.fillRect(s.x, s.y, s.s, s.s);
+                });
+
+                if(this.active) {
+                    this.player.update();
+                    this.player.draw();
+
+                    this.entities.forEach((e, i) => {
+                        e.update();
+                        e.draw();
+                        if(e.dead) {
+                            if(e.type === 'alien') { this.gold += 50; }
+                            if(e.type === 'boss') { this.gold += 1000; this.sector++; document.getElementById('boss-ui').style.display = 'none'; }
+                            this.entities.splice(i, 1);
+                        }
+                    });
+
+                    document.getElementById('sector-val').innerText = this.sector;
+                    document.getElementById('gold-val').innerText = Math.floor(this.gold);
+                    document.getElementById('squad-val').innerText = this.entities.filter(e => e.type === 'green').length;
+
+                    if(this.entities.filter(e => e.type === 'alien' || e.type === 'boss').length === 0) this.spawnWave();
+                }
+                requestAnimationFrame(() => this.loop());
+            }
+        };
+
+        class Actor {
+            constructor(x, y, type, id = 0) {
+                this.x = x; this.y = y; this.type = type; this.id = id;
+                this.dead = false; this.bullets = []; this.lastShot = 0;
+                this.hp = type === 'azure' ? 200 * Game.upgrades.hp : (type === 'green' ? 100 * Game.upgrades.hp : 50);
+                if(type === 'boss') this.hp = 1000 * (Game.sector/5);
+                this.maxHp = this.hp;
+            }
+
+            update() {
+                const now = Date.now();
+                if(this.type === 'azure') {
+                    this.x += (Game.mouse.x - this.x) * 0.15;
+                    this.y += (Game.mouse.y - this.y) * 0.15;
+                    if(now - this.lastShot > 150) this.shoot();
+                } else if(this.type === 'green') {
+                    let tx = Game.player.x + Math.sin(now*0.002 + this.id)*80;
+                    let ty = Game.player.y + 100;
+                    this.x += (tx - this.x) * 0.1; this.y += (ty - this.y) * 0.1;
+                    if(now - this.lastShot > 300) this.shoot();
+                } else if(this.type === 'alien') {
+                    this.y += 2 + (Game.sector * 0.2);
+                    if(this.y > canvas.height) this.dead = true;
+                } else if(this.type === 'boss') {
+                    this.y += (150 - this.y) * 0.05;
+                    this.x = canvas.width/2 + Math.sin(now*0.001)*300;
+                    document.getElementById('boss-hp').style.width = (this.hp/this.maxHp*100)+'%';
+                    if(now - this.lastShot > 500) this.shoot();
+                }
+
+                this.bullets.forEach((b, i) => {
+                    b.y += b.vy; b.x += b.vx;
+                    if(b.y < -50 || b.y > canvas.height + 50) this.bullets.splice(i, 1);
+                    
+                    // Collision
+                    if(this.type === 'azure' || this.type === 'green') {
+                        Game.entities.filter(e => e.type === 'alien' || e.type === 'boss').forEach(en => {
+                            if(Math.hypot(b.x - en.x, b.y - en.y) < 40) {
+                                en.hp -= 20 * Game.upgrades.dmg; b.y = -200;
+                                if(en.hp <= 0) en.dead = true;
+                            }
+                        });
+                    } else {
+                        const targets = [Game.player, ...Game.entities.filter(e => e.type === 'green')];
+                        targets.forEach(t => {
+                            if(Math.hypot(b.x - t.x, b.y - t.y) < 25) {
+                                t.hp -= 10; b.y = 5000;
+                                if(t.hp <= 0) { if(t.type === 'azure') location.reload(); else t.dead = true; }
+                            }
+                        });
+                    }
+                });
+            }
+
+            shoot() {
+                const vy = (this.type === 'alien' || this.type === 'boss') ? 8 : -12;
+                if(this.type === 'azure') {
+                    this.bullets.push({x: this.x-5, y: this.y, vy: vy, vx: 0}, {x: this.x+5, y: this.y, vy: vy, vx: 0});
+                } else if(this.type === 'boss') {
+                    for(let i=-2; i<=2; i++) this.bullets.push({x: this.x, y: this.y, vy: 6, vx: i*2});
+                } else {
+                    this.bullets.push({x: this.x, y: this.y, vy: vy, vx: 0});
+                }
+                this.lastShot = Date.now();
+            }
+
+            draw() {
+                ctx.strokeStyle = this.type === 'azure' ? '#00d4ff' : (this.type === 'green' ? '#00ff88' : '#ff0055');
+                if(this.type === 'boss') ctx.strokeStyle = '#ff00ff';
+                ctx.lineWidth = 3; ctx.beginPath();
+                if(this.type === 'alien') {
+                    ctx.moveTo(this.x-15, this.y); ctx.lineTo(this.x+15, this.y); ctx.lineTo(this.x, this.y+20); ctx.closePath();
+                } else {
+                    ctx.moveTo(this.x, this.y-20); ctx.lineTo(this.x+15, this.y+10); ctx.lineTo(this.x-15, this.y+10); ctx.closePath();
+                }
+                ctx.stroke();
+                this.bullets.forEach(b => { ctx.fillStyle = ctx.strokeStyle; ctx.fillRect(b.x-2, b.y-2, 4, 12); });
+            }
+        }
+
+        Game.init();
+    </script>
+</body>
+</html>
